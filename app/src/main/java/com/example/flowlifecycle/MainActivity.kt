@@ -9,12 +9,23 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.ExperimentalLifecycleComposeApi
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.flowlifecycle.ui.theme.FlowLifecycleTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 class MainActivity : ComponentActivity() {
 
@@ -34,8 +45,10 @@ class MainActivity : ComponentActivity() {
                     val stateVariableWithoutLifecycle = viewModel.counter.collectAsState(0)
                     val externalStateVariableWithLifecycle = viewModel.externalDataWithLifecycle.collectAsStateWithLifecycle(0)
                     val externalStateVariableWithoutLifecycle = viewModel.externalDataWithoutLifecycle.collectAsState(0)
-                    val savedStateVariableWithLifecycle = viewModel.savedStateFlowWithLifecycle.collectAsStateWithLifecycle(0)
-                    val savedStateVariableWithoutLifecycle = viewModel.savedStateFlowWithoutLifecycle.collectAsState(0)
+                    val savedStateVariableWithLifecycle = viewModel.savedStateFlowWithLifecycle.collectAsStateWithLifecycle()
+                    val savedStateVariableWithoutLifecycle = viewModel.savedStateFlowWithoutLifecycle.collectAsState()
+                    val savedStateVariableWithLifecycleWithStatein = viewModel.savedStateFlowWithLifecycleWithStateIn.collectAsStateWithLifecycle()
+                    val savedStateVariableWithoutLifecycleWithStatein = viewModel.savedStateFlowWithoutLifecycleWithStateIn.collectAsState()
                     Greeting("\n" + """
                         Within Flow With LifeCycle: ${stateVariableWithLifecycle.value}
                         Within Flow Without LifeCycle: ${stateVariableWithoutLifecycle.value}
@@ -43,7 +56,10 @@ class MainActivity : ComponentActivity() {
                         Outside Flow Without LifeCycle: ${externalStateVariableWithoutLifecycle.value}
                         Saved Flow With LifeCycle: ${savedStateVariableWithLifecycle.value}
                         Saved Flow Without LifeCycle: ${savedStateVariableWithoutLifecycle.value}
-                        """.trimIndent())
+                        Saved Flow With LifeCycle With StateIn: ${savedStateVariableWithLifecycleWithStatein.value}
+                        Saved Flow Without LifeCycle With StateIn: ${savedStateVariableWithoutLifecycleWithStatein.value}
+                        """.trimIndent() + "\n")
+
                 }
             }
         }
@@ -60,5 +76,31 @@ fun Greeting(name: String) {
 fun DefaultPreview() {
     FlowLifecycleTheme {
         Greeting("Android")
+    }
+}
+
+
+@Composable
+fun <T> Flow<T>.myCollectAsStateWithLifecycle(
+    initialValue: T,
+    lifecycle: Lifecycle = LocalLifecycleOwner.current.lifecycle,
+    minActiveState: Lifecycle.State = Lifecycle.State.STARTED,
+    context: CoroutineContext = EmptyCoroutineContext,
+    postExecuteThis: (suspend () -> Unit)? = null
+): State<T> {
+    return produceState(initialValue, this, lifecycle, minActiveState, context) {
+        lifecycle.repeatOnLifecycle(minActiveState) {
+            if (context == EmptyCoroutineContext) {
+                this@myCollectAsStateWithLifecycle.collect {
+                    this@produceState.value = it
+                    postExecuteThis?.invoke()
+                }
+            } else withContext(context) {
+                this@myCollectAsStateWithLifecycle.collect {
+                    this@produceState.value = it
+                    postExecuteThis?.invoke()
+                }
+            }
+        }
     }
 }
